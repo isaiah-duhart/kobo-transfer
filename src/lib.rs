@@ -1,6 +1,13 @@
-use std::{env::{self, Args}, ffi::OsStr, fs, io, os::unix::fs::MetadataExt, path::{Path, PathBuf}, process::{self, Command}};
+use std::{
+    env::{self, Args},
+    ffi::OsStr,
+    fs, io,
+    os::unix::fs::MetadataExt,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
-pub fn transfer(config: Config) -> Result<(), String>{
+pub fn transfer(config: Config) -> Result<(), String> {
     let download_dir = format!("{}/Downloads", config.home);
     let calibre_dir = format!("{}/Calibre Library", config.home);
     let digital_editions_dir = format!("{}/Documents/Digital Editions", config.home);
@@ -29,26 +36,27 @@ pub fn transfer(config: Config) -> Result<(), String>{
     }
 
     // Moving files to kobo and collecting errors
-    let mut errors: Vec<String> = mv_files.iter()
+    let mut errors: Vec<String> = mv_files
+        .iter()
         .filter_map(|file| {
             let Some(filename) = file.file_name() else {
-                return None
+                return None;
             };
 
             let Some(filename) = filename.to_str() else {
-                return None
+                return None;
             };
             move_file(file, format!("{}/{}", config.dest, filename)).err()
         })
-        .map(|error| { error.to_string() })
+        .map(|error| error.to_string())
         .collect();
-    
+
     // Getting all .acsm files in Downloads dir to remove
     let mut rm_files = match search_dir(&download_dir, acsm_extension) {
         Err(err) => {
             eprintln!("Error searching downloads dir for acsm files {err:?}");
             Vec::new()
-        }   
+        }
         Ok(files) => {
             println!("Found acsm files in downloads dir {files:?}");
             files
@@ -63,9 +71,10 @@ pub fn transfer(config: Config) -> Result<(), String>{
 
     // Adding errors from removing acsm files
     errors.extend(
-        rm_files.iter()
-        .filter_map(|file|fs::remove_file(file).err())
-        .map(|err| err.to_string())
+        rm_files
+            .iter()
+            .filter_map(|file| fs::remove_file(file).err())
+            .map(|err| err.to_string()),
     );
 
     // If we are copying to a different devices,
@@ -83,11 +92,11 @@ pub fn transfer(config: Config) -> Result<(), String>{
                 };
             }
         }
-    } 
-    
+    }
+
     match errors.is_empty() {
         true => Ok(()),
-        false => Err(errors.join("\n"))
+        false => Err(errors.join("\n")),
     }
 }
 
@@ -99,9 +108,10 @@ fn search_dir(dir: &str, extension: &str) -> Result<Vec<PathBuf>, io::Error> {
         .filter(|file| file.is_file())
         .filter(|file| {
             let Some(ext) = file.extension() else {
-                return false
+                return false;
             };
-            ext == extension})
+            ext == extension
+        })
         .collect::<Vec<PathBuf>>())
 }
 
@@ -118,7 +128,7 @@ fn search_subdirs<P: AsRef<Path>>(dir: P, extension: &str) -> Option<Vec<PathBuf
                 dirs.push(path);
             } else if path.is_file() {
                 let Some(ext) = path.extension() else {
-                    return (files, dirs)
+                    return (files, dirs);
                 };
                 if ext == extension {
                     files.push(path);
@@ -126,26 +136,26 @@ fn search_subdirs<P: AsRef<Path>>(dir: P, extension: &str) -> Option<Vec<PathBuf
             }
             (files, dirs)
         });
-    
+
     dirs.iter()
         .filter_map(|dir| search_subdirs(dir, extension))
         .for_each(|dir| files.extend(dir));
 
     match !files.is_empty() {
         true => Some(files),
-        false => None
+        false => None,
     }
 }
 
 fn move_file<P, Q>(src: P, dest: Q) -> io::Result<()>
 where
     P: AsRef<Path>,
-    Q: AsRef<Path>
+    Q: AsRef<Path>,
 {
     let Ok(_) = fs::rename(&src, &dest) else {
         match fs::copy(&src, &dest) {
             Err(err) => return Err(err),
-            Ok(_) => return fs::remove_file(&src)
+            Ok(_) => return fs::remove_file(&src),
         }
     };
 
@@ -154,10 +164,10 @@ where
 
 fn eject_volume<P: AsRef<OsStr>>(volume_path: P) -> io::Result<()> {
     let output = Command::new("diskutil")
-            .arg("eject")
-            .arg(volume_path)
-            .output()?;
-    
+        .arg("eject")
+        .arg(volume_path)
+        .output()?;
+
     if output.status.success() {
         println!("Sucessfully ejected device");
         Ok(())
@@ -165,15 +175,15 @@ fn eject_volume<P: AsRef<OsStr>>(volume_path: P) -> io::Result<()> {
         let error = String::from_utf8_lossy(&output.stderr);
         Err(io::Error::new(
             io::ErrorKind::Other,
-            format!("Error ejecting device {error}")
+            format!("Error ejecting device {error}"),
         ))
     }
 }
 
-fn is_diff_device<P, Q>(path_a: P, path_b: Q, errors: &mut Vec<String>) -> bool 
+fn is_diff_device<P, Q>(path_a: P, path_b: Q, errors: &mut Vec<String>) -> bool
 where
     P: AsRef<Path>,
-    Q: AsRef<Path>
+    Q: AsRef<Path>,
 {
     // Get device ids for src and dest
     let device_a = match fs::metadata(path_a) {
@@ -181,15 +191,14 @@ where
             errors.push(err.to_string());
             None
         }
-        Ok(metadata) => Some(metadata.dev())
-        
+        Ok(metadata) => Some(metadata.dev()),
     };
     let device_b = match fs::metadata(path_b) {
         Err(err) => {
             errors.push(err.to_string());
             None
-        },
-        Ok(metadata) => Some(metadata.dev())
+        }
+        Ok(metadata) => Some(metadata.dev()),
     };
 
     // Return true if src devices is different than dest devices
@@ -201,32 +210,32 @@ pub fn help() {
 }
 pub struct Config {
     dest: String,
-    home: String
+    home: String,
 }
 
 impl Config {
     /// Returns a Config with the flags set on the cmdline
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// Panics if there is not atleast one additional arg
     ///
     pub fn build(mut args: Args) -> Option<Config> {
         let home = match env::var("HOME") {
             Err(_) => return None,
-            Ok(home) => home
+            Ok(home) => home,
         };
         let mut dest = None;
         while let Some(arg) = args.next() {
             match arg {
                 // Add other options here..
-                other => dest = Some(other)
+                other => dest = Some(other),
             }
         }
 
         match dest {
             Some(dest) => Some(Config { dest, home }),
-            None => None
+            None => None,
         }
     }
 }
@@ -236,22 +245,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_search_subdirs_some() {  
+    fn test_search_subdirs_some() {
         let Ok(home) = env::var("HOME") else {
             panic!("Can't get HOME env var");
         };
 
-        let Some(mut files) = search_subdirs(&format!("{}/code/kobo-transfer", home), "epub") else {
+        let Some(mut files) = search_subdirs(&format!("{}/code/kobo-transfer", home), "epub")
+        else {
             panic!("Files should be some, but got none")
         };
 
         assert_eq!(
             files.sort(),
             vec![
-                PathBuf::from(format!("{}/code/kobo-transfer/tests/fixtures/recipe.epub", home)),
-                PathBuf::from(format!("{}/code/kobo-transfer/tests/fixtures/wow.epub", home)),
-                PathBuf::from(format!("{}/code/kobo-transfer/tests/fixtures/grub.epub", home)),
-            ].sort());
+                PathBuf::from(format!(
+                    "{}/code/kobo-transfer/tests/fixtures/recipe.epub",
+                    home
+                )),
+                PathBuf::from(format!(
+                    "{}/code/kobo-transfer/tests/fixtures/wow.epub",
+                    home
+                )),
+                PathBuf::from(format!(
+                    "{}/code/kobo-transfer/tests/fixtures/grub.epub",
+                    home
+                )),
+            ]
+            .sort()
+        );
     }
 
     #[test]
@@ -263,5 +284,4 @@ mod tests {
         let files = search_subdirs(format!("{}/code/kobo-transfer/src", home), "epub");
         assert!(files.is_none())
     }
-
 }
