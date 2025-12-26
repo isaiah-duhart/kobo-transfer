@@ -1,4 +1,4 @@
-use std::{env::{self, Args}, fs, io, path::{Path, PathBuf}};
+use std::{env::{self, Args}, ffi::OsStr, fs, io, os::unix::fs::MetadataExt, path::{Path, PathBuf}, process::{self, Command}};
 
 pub fn transfer(config: Config) -> Result<(), String>{
     let download_dir = format!("{}/Downloads", config.home);
@@ -68,6 +68,23 @@ pub fn transfer(config: Config) -> Result<(), String>{
         .map(|err| err.to_string())
     );
 
+    // If we are copying to a different devices,
+    // Find root dir of dest device and eject it (only works on mac)
+    if is_diff_device(&download_dir, &config.dest, &mut errors) {
+        let path = PathBuf::from(&config.dest);
+        let path: Vec<&Path> = path.ancestors().collect();
+        for child_parent in path.windows(2) {
+            let child = child_parent[0];
+            let parent = child_parent[1];
+            if is_diff_device(child, parent, &mut errors) {
+                println!("Ejecting volume {:?}", child);
+                if let Err(err) = eject_volume(child) {
+                    errors.push(err.to_string());
+                };
+            }
+        }
+    } 
+    
     match errors.is_empty() {
         true => Ok(()),
         false => Err(errors.join("\n"))
@@ -133,6 +150,50 @@ where
     };
 
     Ok(())
+}
+
+fn eject_volume<P: AsRef<OsStr>>(volume_path: P) -> io::Result<()> {
+    let output = Command::new("diskutil")
+            .arg("eject")
+            .arg(volume_path)
+            .output()?;
+    
+    if output.status.success() {
+        println!("Sucessfully ejected device");
+        Ok(())
+    } else {
+        let error = String::from_utf8_lossy(&output.stderr);
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("Error ejecting device {error}")
+        ))
+    }
+}
+
+fn is_diff_device<P, Q>(path_a: P, path_b: Q, errors: &mut Vec<String>) -> bool 
+where
+    P: AsRef<Path>,
+    Q: AsRef<Path>
+{
+    // Get device ids for src and dest
+    let device_a = match fs::metadata(path_a) {
+        Err(err) => {
+            errors.push(err.to_string());
+            None
+        }
+        Ok(metadata) => Some(metadata.dev())
+        
+    };
+    let device_b = match fs::metadata(path_b) {
+        Err(err) => {
+            errors.push(err.to_string());
+            None
+        },
+        Ok(metadata) => Some(metadata.dev())
+    };
+
+    // Return true if src devices is different than dest devices
+    device_a != device_b && device_a.is_some()
 }
 
 pub fn help() {
