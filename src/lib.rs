@@ -38,7 +38,7 @@ pub fn transfer(config: Config) -> Result<(), String>{
             let Some(filename) = filename.to_str() else {
                 return None
             };
-            fs::rename(file, format!("{}/{}", config.dest, filename)).err()
+            move_file(file, format!("{}/{}", config.dest, filename)).err()
         })
         .map(|error| { error.to_string() })
         .collect();
@@ -120,6 +120,21 @@ fn search_subdirs<P: AsRef<Path>>(dir: P, extension: &str) -> Option<Vec<PathBuf
     }
 }
 
+fn move_file<P, Q>(src: P, dest: Q) -> io::Result<()>
+where
+    P: AsRef<Path>,
+    Q: AsRef<Path>
+{
+    let Ok(_) = fs::rename(&src, &dest) else {
+        match fs::copy(&src, &dest) {
+            Err(err) => return Err(err),
+            Ok(_) => return fs::remove_file(&src)
+        }
+    };
+
+    Ok(())
+}
+
 pub fn help() {
     println!("Usage: kobo-transfer [options...] <destination>");
 }
@@ -183,7 +198,7 @@ mod tests {
         let Ok(home) = env::var("HOME") else {
             panic!("Can't get HOME env var");
         };
-         
+
         let files = search_subdirs(format!("{}/code/kobo-transfer/src", home), "epub");
         assert!(files.is_none())
     }
