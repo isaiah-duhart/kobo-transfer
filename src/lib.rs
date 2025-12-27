@@ -46,7 +46,7 @@ pub fn transfer(config: Config) -> Result<(), String> {
             let Some(filename) = filename.to_str() else {
                 return None;
             };
-            move_file(file, format!("{}/{}", config.dest, filename)).err()
+            transfer_file(file, format!("{}/{}", config.dest, filename), format!("{}/books", config.home)).err()
         })
         .map(|error| error.to_string())
         .collect();
@@ -160,6 +160,16 @@ where
     };
 
     Ok(())
+}
+
+fn transfer_file<P, Q, R>(from: P, move_to: Q, copy_to: R) -> io::Result<()>
+where
+    P: AsRef<Path>,
+    Q: AsRef<Path>,
+    R: AsRef<Path>
+{
+    fs::copy(&from, copy_to)?;
+    move_file(&from, move_to)
 }
 
 fn eject_volume<P: AsRef<OsStr>>(volume_path: P) -> io::Result<()> {
