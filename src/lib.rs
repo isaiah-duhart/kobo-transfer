@@ -1,6 +1,7 @@
 use std::{
     env::{self, Args},
     ffi::OsStr,
+    fmt::Display,
     fs, io,
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
@@ -46,7 +47,12 @@ pub fn transfer(config: Config) -> Result<(), String> {
             let Some(filename) = filename.to_str() else {
                 return None;
             };
-            transfer_file(file, format!("{}/{}", config.dest, filename), format!("{}/books", config.home)).err()
+            transfer_file(
+                file,
+                format!("{}/{}", config.dest, filename),
+                format!("{}/books", config.home),
+            )
+            .err()
         })
         .map(|error| error.to_string())
         .collect();
@@ -162,14 +168,37 @@ where
     Ok(())
 }
 
-fn transfer_file<P, Q, R>(from: P, move_to: Q, copy_to: R) -> io::Result<()>
+fn transfer_file<P, Q>(from: &PathBuf, move_to: P, copy_to: Q) -> io::Result<()>
 where
-    P: AsRef<Path>,
-    Q: AsRef<Path>,
-    R: AsRef<Path>
+    P: AsRef<Path> + Display,
+    Q: AsRef<Path> + Display,
 {
-    fs::copy(&from, copy_to)?;
-    move_file(&from, move_to)
+    if let Err(e) = fs::copy(
+        &from,
+        format!("{}/{:?}", copy_to, from.file_name().unwrap()),
+    ) {
+        return Err(io::Error::new(
+            e.kind(),
+            format!(
+                "Error copying {} to {}: {}",
+                from.display(),
+                copy_to,
+                e.to_string()
+            ),
+        ));
+    };
+    if let Err(e) = move_file(&from, &move_to) {
+        return Err(io::Error::new(
+            e.kind(),
+            format!(
+                "Error copying {} to {}: {}",
+                from.display(),
+                move_to,
+                e.to_string()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn eject_volume<P: AsRef<OsStr>>(volume_path: P) -> io::Result<()> {
