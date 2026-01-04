@@ -173,19 +173,22 @@ where
     P: AsRef<Path> + Display,
     Q: AsRef<Path> + Display,
 {
-    if let Err(e) = fs::copy(
-        &from,
-        format!("{}/{:?}", copy_to, from.file_name().unwrap()),
-    ) {
-        return Err(io::Error::new(
-            e.kind(),
-            format!(
-                "Error copying {} to {}: {}",
-                from.display(),
-                copy_to,
-                e.to_string()
-            ),
-        ));
+    if let Some(file_name) = from.file_name() {
+        if let Some(file_name) = file_name.to_str() {
+            let file_name = file_name.trim_matches('"');
+
+            if let Err(e) = fs::copy(&from, format!("{}/{}", copy_to, file_name)) {
+                return Err(io::Error::new(
+                    e.kind(),
+                    format!(
+                        "Error copying {} to {}: {}",
+                        from.display(),
+                        copy_to,
+                        e.to_string()
+                    ),
+                ));
+            };
+        }
     };
     if let Err(e) = move_file(&from, &move_to) {
         return Err(io::Error::new(
